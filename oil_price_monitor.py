@@ -1,9 +1,3 @@
-"""
-Oil Price Monitor for Airline Club
-Fetches the latest oil price and sends a Discord notification.
-Pings @everyone when the price dips below a configurable threshold.
-"""
-
 import os
 import sys
 import json
