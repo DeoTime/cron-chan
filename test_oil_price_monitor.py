@@ -9,6 +9,7 @@ import requests
 from oil_price_monitor import (
     OIL_PRICES_URL,
     extract_current_price,
+    should_ping_for_price,
     build_discord_message,
     fetch_oil_prices,
     send_discord_notification,
@@ -62,6 +63,26 @@ class TestExtractCurrentPrice:
 
 
 # ---------------------------------------------------------------------------
+# should_ping_for_price
+# ---------------------------------------------------------------------------
+
+class TestShouldPingForPrice:
+    def test_non_list_data_defaults_to_ping(self):
+        assert should_ping_for_price({"price": 60.0}) is True
+
+    def test_single_list_entry_defaults_to_ping(self):
+        assert should_ping_for_price([{"price": 60.0}]) is True
+
+    def test_repeated_latest_price_does_not_ping(self):
+        data = [{"price": 60.0}, {"price": 60.0}]
+        assert should_ping_for_price(data) is False
+
+    def test_changed_latest_price_pings(self):
+        data = [{"price": 60.0}, {"price": 59.0}]
+        assert should_ping_for_price(data) is True
+
+
+# ---------------------------------------------------------------------------
 # build_discord_message
 # ---------------------------------------------------------------------------
 
@@ -79,6 +100,10 @@ class TestBuildDiscordMessage:
         embed = payload["embeds"][0]
         assert "🔴" in embed["fields"][1]["value"]
         assert embed["color"] == 0xFF4444
+
+    def test_below_threshold_without_ping_has_no_content(self):
+        payload = build_discord_message(price=50.0, threshold=60.0, should_ping=False)
+        assert "content" not in payload
 
     def test_embed_shows_price(self):
         payload = build_discord_message(price=72.34, threshold=60.0)
@@ -169,7 +194,7 @@ class TestRun:
         responses.add(
             responses.GET,
             OIL_PRICES_URL,
-            json={"price": 45.0},
+            json=[{"price": 50.0}, {"price": 45.0}],
             status=200,
         )
         responses.add(responses.POST, FAKE_WEBHOOK, status=204)
@@ -177,6 +202,20 @@ class TestRun:
         assert price == 45.0
         sent_body = json.loads(responses.calls[1].request.body)
         assert "@everyone" in sent_body.get("content", "")
+
+    @responses.activate
+    def test_run_below_threshold_same_price_no_ping(self):
+        responses.add(
+            responses.GET,
+            OIL_PRICES_URL,
+            json=[{"price": 45.0}, {"price": 45.0}],
+            status=200,
+        )
+        responses.add(responses.POST, FAKE_WEBHOOK, status=204)
+        price = run(webhook_url=FAKE_WEBHOOK, threshold=60.0)
+        assert price == 45.0
+        sent_body = json.loads(responses.calls[1].request.body)
+        assert "content" not in sent_body
 
     @responses.activate
     def test_run_raises_on_api_failure(self):
