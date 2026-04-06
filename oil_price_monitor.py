@@ -43,7 +43,13 @@ def extract_current_price(data: dict | list) -> float:
 
 
 def should_ping_for_price(data: dict | list) -> bool:
-    """Return True when the latest price is new compared to the previous value."""
+    """Return True when this reading should include a ping.
+
+    For non-list payloads and single-entry lists, returns True because there is
+    no prior value in the payload to compare against. For list payloads with at
+    least two entries, compares the last two items and returns True only when
+    the latest (last) value differs from the previous one.
+    """
     if not isinstance(data, list):
         return True
     if len(data) < 2:
