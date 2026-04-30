@@ -2,7 +2,7 @@ name: Oil Price Monitor
 
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "2/15 * * * *"
   workflow_dispatch:
 
 jobs:
