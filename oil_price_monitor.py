@@ -42,10 +42,28 @@ def extract_current_price(data: dict | list) -> float:
     raise ValueError(f"Could not find price field in API response: {entry}")
 
 
-def build_discord_message(price: float, threshold: float) -> dict:
+def should_ping_for_price(data: dict | list) -> bool:
+    """Return True when this reading should include a ping.
+
+    For non-list payloads and single-entry lists, returns True because there is
+    no prior value in the payload to compare against. For list payloads with at
+    least two entries, compares the last two items and returns True only when
+    the latest (last) value differs from the previous one.
+    """
+    if not isinstance(data, list):
+        return True
+    if len(data) < 2:
+        return True
+
+    latest = extract_current_price(data[-1])
+    previous = extract_current_price(data[-2])
+    return latest != previous
+
+
+def build_discord_message(price: float, threshold: float, should_ping: bool = True) -> dict:
     """Build the Discord webhook payload."""
     below_threshold = price < threshold
-    if below_threshold:
+    if below_threshold and should_ping:
         content = (
             f"@everyone 🚨 **Oil price alert!** The current oil price is "
             f"**${price:.2f}**, which is below the threshold of **${threshold:.2f}**."
@@ -109,9 +127,10 @@ def run(
     data = fetch_oil_prices(oil_url)
 
     price = extract_current_price(data)
+    ping_for_price = should_ping_for_price(data)
     logger.info("Current oil price: $%.2f (threshold: $%.2f)", price, threshold)
 
-    payload = build_discord_message(price, threshold)
+    payload = build_discord_message(price, threshold, should_ping=ping_for_price)
     send_discord_notification(payload, webhook_url)
 
     if price < threshold:
